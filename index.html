@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telemetry Data Dashboard</title>
+    <!-- Tailwind CSS CDN for easy styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for Inter font and general layout */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #e7ebf4; /* Light gray background */
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        .card {
+            background-color: #ffffff;
+            border-radius: 0.75rem; /* Rounded corners */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: background-color 0.2s ease-in-out;
+        }
+        .btn-primary {
+            background-color: #0582b4; 
+            color:white;
+        }
+        .btn-primary:hover {
+            background-color: #0582b4;  /* Darker indigo */
+        }
+        .plot-container {
+            min-height: 400px; /* Ensure plot area has some height */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #e5e7eb; /* Lighter gray for plot background */
+            border-radius: 0.75rem;
+            overflow: hidden; /* Hide overflow if image is too big */
+        }
+
+        .plot-container img {
+            width: 100%;       /* Make image take full width of its container */
+            height: auto;      /* Maintain aspect ratio */
+            object-fit: contain; /* Ensures the whole image is visible within its bounds, scaling down if necessary */
+            display: block;    /* Removes any extra space below the image */
+        }    
+        
+        .plot-container p {
+              display: none; /* Hide the loading text by default */
+          }
+          /* Show the loading text only when placeholder images are active */
+          .plot-container img[src="https://placehold.co/600x400/cccccc/333333?text=Loading+Plot..."] + p,
+          .plot-container img[src="https://placehold.co/600x400/cccccc/333333?text=Plot+Unavailable"] + p {
+              display: block;
+          }
+          .plot-container img:not([src="https://placehold.co/600x400/cccccc/333333?text=Loading+Plot..."]):not([src="https://placehold.co/600x400/cccccc/333333?text=Plot+Unavailable"]) + p {
+              display: none; /* Hide text when a real image is loaded */
+          }
+          
+    </style>
+</head>
+<body class="text-gray-800">
+    <div class="container">
+        <h1 class="text-4xl font-bold text-center mb-8 text-sky-700">Telemetry Data Dashboard</h1>
+
+        <!-- Controls Section -->
+        <div class="card flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-4 w-full sm:w-auto">
+                <label for="deviceIdSelect" class="font-medium">Device ID:</label>
+                <select id="deviceIdSelect" class="p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 flex-grow">
+                    <!-- Options will be populated by JavaScript -->
+                    <option value="sensor-alpha-001">sensor-alpha-001</option>
+                    <option value="sensor-beta-002">sensor-beta-002</option>
+                    <option value="sensor-gamma-003">sensor-gamma-003</option>
+                    <option value="sensor-delta-004">sensor-delta-004</option>
+                </select>
+            </div>
+            <div class="flex items-center gap-4 w-full sm:w-auto">
+                <label for="metricNameSelect" class="font-medium">Metric:</label>
+                <select id="metricNameSelect" class="p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 flex-grow">
+                    <!-- Options will be populated by JavaScript -->
+                    <option value="temperature">temperature</option>
+                    <option value="humidity">humidity</option>
+                    <option value="cpu_usage">cpu_usage</option>
+                    <option value="pressure">pressure</option>
+                    <option value="battery_level">battery_level</option>
+                </select>
+            </div>
+            <button id="refreshButton" class="btn btn-primary w-full sm:w-auto">Refresh Data</button>
+        </div>
+
+        <!-- Telemetry Plot Section -->
+        <div class="card">
+            <h2 class="text-2xl font-semibold mb-4 text-sky-600">Telemetry Trend</h2>
+            <div id="plotContainer" class="plot-container">
+                <p class="text-gray-500">Loading plot...</p>
+                <!-- Matplotlib plot image will be loaded here -->
+                <img id="telemetryPlot" src="" alt="Telemetry Data Plot" class="max-w-full h-auto rounded-lg" onerror="this.onerror=null;this.src='https://placehold.co/600x400/cccccc/333333?text=Plot+Unavailable';">
+            </div>
+        </div>
+
+        <!-- Anomaly List Section -->
+        <div class="card">
+            <h2 class="text-2xl font-semibold mb-4 text-sky-600">Detected Anomalies</h2>
+            <div id="anomaliesList" class="overflow-x-auto">
+                <table class="min-w-full bg-white rounded-lg shadow-sm">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th class="py-2 px-4 text-left text-sm font-medium text-gray-600 uppercase tracking-wider rounded-tl-lg">Timestamp (UTC)</th>
+                            <th class="py-2 px-4 text-left text-sm font-medium text-gray-600 uppercase tracking-wider">Device ID</th>
+                            <th class="py-2 px-4 text-left text-sm font-medium text-gray-600 uppercase tracking-wider">Metric</th>
+                            <th class="py-2 px-4 text-left text-sm font-medium text-gray-600 uppercase tracking-wider">Value</th>
+                            <th class="py-2 px-4 text-left text-sm font-medium text-gray-600 uppercase tracking-wider rounded-tr-lg">Type</th>
+                        </tr>
+                    </thead>
+                    <tbody id="anomaliesTableBody" class="divide-y divide-gray-200">
+                        <tr><td colspan="5" class="py-4 px-4 text-center text-gray-500">No anomalies detected yet.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const FASTAPI_BASE_URL = "http://127.0.0.1:8000";
+        const deviceIdSelect = document.getElementById('deviceIdSelect');
+        const metricNameSelect = document.getElementById('metricNameSelect');
+        const telemetryPlot = document.getElementById('telemetryPlot');
+        const anomaliesTableBody = document.getElementById('anomaliesTableBody');
+        const refreshButton = document.getElementById('refreshButton');
+
+        // Function to fetch and display the plot
+        async function fetchAndDisplayPlot() {
+            const deviceId = deviceIdSelect.value;
+            const metricName = metricNameSelect.value;
+            const plotUrl = `${FASTAPI_BASE_URL}/plot/${deviceId}/${metricName}`;
+            
+            telemetryPlot.src = 'https://placehold.co/600x400/cccccc/333333?text=Loading+Plot...'; // Placeholder while loading
+
+            try {
+                const response = await fetch(plotUrl);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                // Assuming the backend returns the image directly
+                // Create a Blob from the response and then an object URL
+                const imageBlob = await response.blob();
+                const imageUrl = URL.createObjectURL(imageBlob);
+                telemetryPlot.src = imageUrl;
+            } catch (error) {
+                console.error("Error fetching plot:", error);
+                telemetryPlot.src = 'https://placehold.co/600x400/cccccc/333333?text=Plot+Unavailable'; // Fallback image
+            }
+        }
+
+        // Function to fetch and display anomalies
+        async function fetchAndDisplayAnomalies() {
+            const anomaliesUrl = `${FASTAPI_BASE_URL}/anomalies/`;
+            try {
+                const response = await fetch(anomaliesUrl);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const anomalies = await response.json();
+                
+                anomaliesTableBody.innerHTML = ''; // Clear existing rows
+
+                if (anomalies.length === 0) {
+                    anomaliesTableBody.innerHTML = '<tr><td colspan="5" class="py-4 px-4 text-center text-gray-500">No anomalies detected yet.</td></tr>';
+                } else {
+                    anomalies.forEach(anomaly => {
+                        const row = document.createElement('tr');
+                        row.className = 'hover:bg-gray-50';
+                        row.innerHTML = `
+                            <td class="py-2 px-4 whitespace-nowrap text-sm text-gray-900">${new Date(anomaly.timestamp).toLocaleString()}</td>
+                            <td class="py-2 px-4 whitespace-nowrap text-sm text-gray-900">${anomaly.device_id}</td>
+                            <td class="py-2 px-4 whitespace-nowrap text-sm text-gray-900">${anomaly.metric_name}</td>
+                            <td class="py-2 px-4 whitespace-nowrap text-sm text-gray-900">${anomaly.metric_value.toFixed(2)} ${anomaly.unit || ''}</td>
+                            <td class="py-2 px-4 whitespace-nowrap text-sm text-gray-900">${anomaly.anomaly_type || 'N/A'}</td>
+                        `;
+                        anomaliesTableBody.appendChild(row);
+                    });
+                }
+            } catch (error) {
+                console.error("Error fetching anomalies:", error);
+                anomaliesTableBody.innerHTML = '<tr><td colspan="5" class="py-4 px-4 text-center text-red-500">Error loading anomalies.</td></tr>';
+            }
+        }
+
+        // Main update function
+        function updateDashboard() {
+            fetchAndDisplayPlot();
+            fetchAndDisplayAnomalies();
+        }
+
+        // Event Listeners
+        refreshButton.addEventListener('click', updateDashboard);
+        deviceIdSelect.addEventListener('change', updateDashboard);
+        metricNameSelect.addEventListener('change', updateDashboard);
+
+
+        // Initial load and periodic refresh
+        document.addEventListener('DOMContentLoaded', () => {
+            updateDashboard(); // Load data on page load
+            // Set up periodic refresh (e.g., every 10 seconds)
+            setInterval(updateDashboard, 10000); // Refresh every 10 seconds
+        });
+
+    </script>
+</body>
+</html>
